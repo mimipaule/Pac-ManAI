@@ -10,8 +10,9 @@ from __future__ import annotations
 import argparse, sys, os
 from pathlib import Path
 import torch
+import torch.nn as nn
 from pacman_env import PacmanEnv
-from dqn_agent import DQN, DEVICE
+from dqn_agent import get_arch, DEVICE
 
 # Try to import cv2, but handle gracefully if display is not available
 try:
@@ -22,9 +23,20 @@ except ImportError:
     print("OpenCV not available - running in headless mode")
 
 # ───────────────────────── helper ─────────────────────────
-def load_net(weight_file: Path, n_actions: int, obs_shape) -> DQN:
-    net = DQN(obs_shape, n_actions).to(DEVICE)
-    net.load_state_dict(torch.load(weight_file, map_location=DEVICE))
+def load_net(weight_file: Path, n_actions: int, obs_shape) -> nn.Module:
+    data = torch.load(weight_file, map_location=DEVICE)
+    
+    if isinstance(data, dict) and 'arch' in data:
+        arch_name = data['arch']
+        state_dict = data['state_dict']
+        print(f"Detected architecture: {arch_name}")
+    else:
+        arch_name = "original"
+        state_dict = data
+        print("Legacy model detected, assuming 'original' architecture")
+        
+    net = get_arch(arch_name, obs_shape, n_actions).to(DEVICE)
+    net.load_state_dict(state_dict)
     net.eval()
     return net
 
@@ -46,7 +58,7 @@ def is_display_available():
         return False
 
 # ───────────────────────── visual play loop ──────────────────────
-def play_visual(layout: str, net: DQN, episodes: int, delay_ms: int, scale: int):
+def play_visual(layout: str, net: nn.Module, episodes: int, delay_ms: int, scale: int):
     """Play with OpenCV visualization."""
     env = PacmanEnv(layout)
     wins = 0
@@ -85,7 +97,7 @@ def play_visual(layout: str, net: DQN, episodes: int, delay_ms: int, scale: int)
     env.close(); cv2.destroyAllWindows()
 
 # ───────────────────────── headless play loop ──────────────────────
-def play_headless(layout: str, net: DQN, episodes: int):
+def play_headless(layout: str, net: nn.Module, episodes: int):
     """Play without display - text output only."""
     env = PacmanEnv(layout)
     wins = 0
@@ -139,7 +151,7 @@ def play_headless(layout: str, net: DQN, episodes: int):
     env.close()
 
 # ───────────────────────── main play function ──────────────────────
-def play(layout: str, net: DQN, episodes: int, delay_ms: int = 100, scale: int = 3, headless: bool = False):
+def play(layout: str, net: nn.Module, episodes: int, delay_ms: int = 100, scale: int = 3, headless: bool = False):
     """Play with automatic display detection or explicit headless mode."""
     if headless or not is_display_available():
         if not headless:

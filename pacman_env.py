@@ -26,7 +26,7 @@ LAYOUTS: dict[str, np.ndarray] = {
     "spiral_harder": tiny_walls.copy(),
 }
 
-# ───────── classic 19×15 maze with corridors ─────────
+# ───────── classic 21×15 maze with corridors ─────────
 classic_board = np.array([
  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
  [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,1],
