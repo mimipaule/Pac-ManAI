@@ -24,7 +24,7 @@ LR                = 1e-3
 EPS               = (1.0, 0.05, 8_000)   # ε‑greedy schedule (start, end, decay)
 
 # ───────── single‑layout trainer ─────────
-def train_layout(layout: str, episodes: int) -> Path:
+def train_layout(layout: str, episodes: int, model_name: str) -> Path:
     env = PacmanEnv(layout)
     obs_shape = env.observation_space.shape        # (H, W, C)
     n_actions = env.action_space.n
@@ -58,7 +58,7 @@ def train_layout(layout: str, episodes: int) -> Path:
             print(f"[{layout}] Episode {ep:4d} | reward = {ep_reward:6.1f}")
 
     env.close()
-    weight_path = Path(f"pacman_dqn_{layout}.pt")
+    weight_path = Path(f"pacman_dqn_{layout}_{model_name}.pt")
     torch.save(policy.state_dict(), weight_path)
     print(f"[{layout}] training finished → {weight_path.resolve()}")
     return weight_path
@@ -68,12 +68,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train DQN on all Pac‑Man layouts")
     parser.add_argument(
         "--fast", action="store_true",
-        help="quick 200‑episode run per layout instead of full 4000"
+        help="quick 200-episode run per layout instead of full 4000"
+    )
+    parser.add_argument(
+        "--name", type=str, default="default",
+        help="A name for the model version, used for the saved file"
     )
     args = parser.parse_args()
     episodes = NUM_EPISODES_FAST if args.fast else NUM_EPISODES
 
-
     for layout in ["spiral_harder"]:
 #    for layout in ["classic", "spiral", "spiral_harder", "empty"]:  
-        train_layout(layout, episodes)
+        train_layout(layout, episodes, args.name)
