@@ -34,6 +34,7 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
     
     print(f"Initializing Multi-Task Training on: {layouts}")
     print(f"Architecture: {arch}")
+    print(f"Using device: {DEVICE}")
     
     # Use factory to create networks
     policy = get_arch(arch, obs_shape, n_actions).to(DEVICE)
