@@ -77,7 +77,7 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
                 curr_min_dist = min(abs(p[0] - curr_pos[0]) + abs(p[1] - curr_pos[1]) for p in env.pellets)
                 
                 if curr_min_dist < prev_min_dist:
-                    reward += 0.3  # Bonus for moving closer
+                    reward += 0.5  # Bonus for moving closer
                 elif curr_min_dist >= prev_min_dist:
                     reward -= 0.1  # Penalty for moving away
 

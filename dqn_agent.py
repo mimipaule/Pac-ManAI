@@ -96,7 +96,7 @@ class DQN(nn.Module):
 
 class DQN_Deep(nn.Module):
     """
-    Experimental architecture: Deeper fully connected layers.
+    Experimental architecture: Deeper fully connected layers and more capacity.
     """
     def __init__(self, obs_shape: Tuple[int, int, int], n_actions: int):
         super().__init__()
@@ -104,17 +104,19 @@ class DQN_Deep(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(C, 32, 8, 4), nn.ReLU(),
             nn.Conv2d(32, 64, 4, 2), nn.ReLU(),
-            nn.Conv2d(64, 64, 3, 1), nn.ReLU(),
+            nn.Conv2d(64, 128, 3, 1), nn.ReLU(),
+            nn.Conv2d(128, 128, 3, 1), nn.ReLU(),  # Added 4th layer
             nn.Flatten(),
         )
         with torch.no_grad():
             dummy = torch.zeros(1, C, H, W)
             conv_out = self.conv(dummy).shape[1]
         
-        # Deeper FC section
+        # Deeper & Wider FC section
         self.fc = nn.Sequential(
-            nn.Linear(conv_out, 512), nn.ReLU(),
-            nn.Linear(512, 256), nn.ReLU(),
+            nn.Linear(conv_out, 1024), nn.ReLU(),   # Increased to 1024
+            nn.Linear(1024, 512), nn.ReLU(),        # Increased to 512
+            nn.Linear(512, 256), nn.ReLU(),         # Added layer
             nn.Linear(256, n_actions),
         )
     
