@@ -25,22 +25,33 @@ LR                = 1e-3
 EPS               = (1.0, 0.05, 8_000)   # ε‑greedy schedule (start, end, decay)
 
 # ───────── single‑layout trainer ─────────
-def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -> Path:
+def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, load_path: str = None) -> Path:
     # Create a dummy env just to get observation shape and action count
     tmp_env = PacmanEnv(layouts[0])
     obs_shape = tmp_env.observation_space.shape
     n_actions = tmp_env.action_space.n
     tmp_env.close()
-
+    
     print(f"Initializing Multi-Task Training on: {layouts}")
     print(f"Architecture: {arch}")
     print(f"Using device: {DEVICE}")
-
+    
     # Use factory to create networks
     policy = get_arch(arch, obs_shape, n_actions).to(DEVICE)
     target = get_arch(arch, obs_shape, n_actions).to(DEVICE)
-    target.load_state_dict(policy.state_dict())
+    
+    if load_path:
+        print(f"Loading pre-trained weights from: {load_path}")
+        checkpoint = torch.load(load_path, map_location=DEVICE)
+        # Handle both new dictionary format and legacy state_dict
+        if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+            policy.load_state_dict(checkpoint['state_dict'])
+        else:
+            policy.load_state_dict(checkpoint)
+        print("Weights loaded successfully!")
 
+    target.load_state_dict(policy.state_dict())
+    
     print("Created policy and target networks")
     optimiser = optim.Adam(policy.parameters(), lr=LR)
     memory    = ReplayMemory(MEMORY_CAP)
@@ -171,6 +182,10 @@ if __name__ == "__main__":
         "--arch", type=str, default="original", choices=["original", "deep_v1"],
         help="Network architecture to use (default: original)"
     )
+    parser.add_argument(
+        "--load", type=str, default=None,
+        help="Path to a .pt file to load weights from (transfer learning)"
+    )
     args = parser.parse_args()
     episodes = NUM_EPISODES_FAST if args.fast else NUM_EPISODES
 
@@ -178,8 +193,8 @@ if __name__ == "__main__":
     if args.layout == "mixed" or args.layout is None:
         # Train on ALL layouts randomly
         layouts_to_train = ["classic", "empty", "spiral", "spiral_harder"]
-        train_mixed(layouts_to_train, episodes, args.name, args.arch)
+        train_mixed(layouts_to_train, episodes, args.name, args.arch, args.load)
     else:
         # Train on a single specific layout (legacy mode)
         # We can re-use the mixed trainer with a list of length 1
-        train_mixed([args.layout], episodes, args.name, args.arch)
+        train_mixed([args.layout], episodes, args.name, args.arch, args.load)
