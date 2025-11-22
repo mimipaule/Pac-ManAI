@@ -141,7 +141,20 @@ class ReplayMemory:
 
     def sample(self, batch_size: int):
         s = random.sample(self.buf, batch_size)
-        return map(np.array, zip(*s))
+        
+        # Safe sampling with debugging
+        transposed = list(zip(*s))
+        result = []
+        for i, col in enumerate(transposed):
+            try:
+                result.append(np.array(col))
+            except ValueError as e:
+                print(f"\n[ERROR] ReplayMemory sample failed at column {i}")
+                shapes = [np.shape(x) for x in col]
+                unique_shapes = set(shapes)
+                print(f"Unique shapes found: {unique_shapes}")
+                raise e
+        return result
 
     def __len__(self):
         return len(self.buf)

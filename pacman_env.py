@@ -6,9 +6,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import gymnasium as gym
 from gymnasium import spaces
+import cv2
 
 # ───────── rendering constants ─────────
 PIXELS_PER_CELL = 12          # tile size
+TARGET_SIZE = 84              # Standard deep RL input size
 
 # ───────── 7×7 boards (unchanged) ───────
 tiny_walls = np.array(
@@ -73,8 +75,9 @@ class PacmanEnv(gym.Env):
         self._build_tiles()                   # pixel‑art sprites
 
         self.action_space = spaces.Discrete(4)
+        # IMPORTANT: Force observation space to be fixed size (84x84)
         self.observation_space = spaces.Box(
-            0, 255, shape=(self.img_h, self.img_w, 3), dtype=np.uint8
+            0, 255, shape=(TARGET_SIZE, TARGET_SIZE, 3), dtype=np.uint8
         )
 
         self.rng = np.random.default_rng()
@@ -119,7 +122,7 @@ class PacmanEnv(gym.Env):
 
         self.first_ghost_move = True                    # only used on "empty"
         self.ghost_dir: List[Tuple[int, int] | None] = [None] * len(self.ghost_pos)
-        return self._render_board(), {}
+        return self._get_obs(), {}
 
     # ───────────────────────── step ────────────────────────────
     def step(self, action: int):
@@ -138,7 +141,7 @@ class PacmanEnv(gym.Env):
         if self.pac_pos in self.ghost_pos:
             reward -= 50
             terminated = True
-            return self._render_board(), reward, terminated, False, {}
+            return self._get_obs(), reward, terminated, False, {}
         
         if self.pac_pos in self.pellets:
             self.pellets.remove(self.pac_pos); reward += 10
@@ -199,7 +202,7 @@ class PacmanEnv(gym.Env):
                 reward -= 50
                 terminated = True
 
-        return self._render_board(), reward, terminated, False, {}
+        return self._get_obs(), reward, terminated, False, {}
 
     # ──────────────────────── tile builder ─────────────────────
     def _build_tiles(self):
@@ -242,6 +245,14 @@ class PacmanEnv(gym.Env):
         self.tiles = tiles
 
     # ──────────────────────── rendering ────────────────────────
+    def _get_obs(self) -> np.ndarray:
+        """Return the 84x84 resized observation for the agent."""
+        img = self._render_board()
+        # Resize to 84x84 using INTER_AREA for downsampling (best for shrinking)
+        # or INTER_NEAREST if you want to preserve crisp pixel art edges
+        resized = cv2.resize(img, (TARGET_SIZE, TARGET_SIZE), interpolation=cv2.INTER_AREA)
+        return resized
+
     def _render_board(self) -> np.ndarray:
         board = np.zeros((self.h, self.w), np.uint8)
         board[self.floor == 1] = 1
