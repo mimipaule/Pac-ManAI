@@ -76,7 +76,22 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
                 curr_pos = env.pac_pos
                 curr_min_dist = min(abs(p[0] - curr_pos[0]) + abs(p[1] - curr_pos[1]) for p in env.pellets)
                 
-                if curr_min_dist < prev_min_dist:
+                # Ghost avoidance (Manhattan distance)
+                prev_ghost_dist = min(abs(g[0] - prev_pos[0]) + abs(g[1] - prev_pos[1]) for g in env.ghost_pos)
+                curr_ghost_dist = min(abs(g[0] - curr_pos[0]) + abs(g[1] - curr_pos[1]) for g in env.ghost_pos)
+
+                if curr_pos == prev_pos:
+                    reward -= 2.0  # Big penalty for hitting wall/staying still
+                
+                # Prioritize ghost avoidance if close
+                elif curr_ghost_dist < 5:
+                    if curr_ghost_dist < prev_ghost_dist:
+                        reward -= 1.0  # Penalty for moving closer to danger
+                    elif curr_ghost_dist > prev_ghost_dist:
+                        reward += 0.5  # Bonus for escaping
+                
+                # Otherwise focus on food
+                elif curr_min_dist < prev_min_dist:
                     reward += 0.5  # Bonus for moving closer
                 elif curr_min_dist >= prev_min_dist:
                     reward -= 0.1  # Penalty for moving away
