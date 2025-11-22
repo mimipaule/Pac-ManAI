@@ -83,7 +83,7 @@ def select_action_batch(states: np.ndarray, net: torch.nn.Module, step: int,
 
     return actions
 
-def train_parallel(layouts: list[str], total_episodes: int, model_name: str, arch: str):
+def train_parallel(layouts: list[str], total_episodes: int, model_name: str, arch: str, load_path: str = None):
     # 1. Create Vector Environment
     # We create N environments. Each can potentially have a different layout if we randomize in make_env
     # However, standard AsyncVectorEnv keeps the process alive.
@@ -107,6 +107,16 @@ def train_parallel(layouts: list[str], total_episodes: int, model_name: str, arc
     # 2. Setup Network & Optimiser
     policy = get_arch(arch, obs_shape, n_actions).to(DEVICE)
     target = get_arch(arch, obs_shape, n_actions).to(DEVICE)
+
+    if load_path:
+        print(f"Loading pre-trained weights from: {load_path}")
+        checkpoint = torch.load(load_path, map_location=DEVICE)
+        if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+            policy.load_state_dict(checkpoint['state_dict'])
+        else:
+            policy.load_state_dict(checkpoint)
+        print("Weights loaded successfully!")
+
     target.load_state_dict(policy.state_dict())
 
     optimiser = optim.Adam(policy.parameters(), lr=LR)
@@ -246,6 +256,7 @@ if __name__ == "__main__":
     parser.add_argument("--name", type=str, default="default")
     parser.add_argument("--arch", type=str, default="original", choices=["original", "deep_v1"])
     parser.add_argument("--workers", type=int, default=10, help="Number of parallel envs")
+    parser.add_argument("--load", type=str, default=None, help="Path to .pt file to load weights from")
 
     args = parser.parse_args()
 
@@ -257,4 +268,4 @@ if __name__ == "__main__":
     else:
         layouts = [args.layout]
 
-    train_parallel(layouts, args.episodes, args.name, args.arch)
+    train_parallel(layouts, args.episodes, args.name, args.arch, args.load)
