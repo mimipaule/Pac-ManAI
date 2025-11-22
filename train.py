@@ -89,10 +89,12 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
             if step % TARGET_FREQ == 0:
                 target.load_state_dict(policy.state_dict())
         
+        won = (len(env.pellets) == 0)
         env.close()
 
-        if ep % 100 == 0 or ep == episodes:
-            print(f"[Ep {ep:4d}] Last Layout: {current_layout:15s} | reward = {ep_reward:6.1f}")
+        if True:  # Print every episode
+            result = "WIN " if won else "LOSS"
+            print(f"[Ep {ep:4d}] {result} | Layout: {current_layout:15s} | reward = {ep_reward:6.1f}")
 
     # Save the final "Generalist" model
     if len(layouts) > 1:
