@@ -31,33 +31,36 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
     obs_shape = tmp_env.observation_space.shape
     n_actions = tmp_env.action_space.n
     tmp_env.close()
-    
+
     print(f"Initializing Multi-Task Training on: {layouts}")
     print(f"Architecture: {arch}")
     print(f"Using device: {DEVICE}")
-    
+
     # Use factory to create networks
     policy = get_arch(arch, obs_shape, n_actions).to(DEVICE)
     target = get_arch(arch, obs_shape, n_actions).to(DEVICE)
     target.load_state_dict(policy.state_dict())
-    
+
     print("Created policy and target networks")
     optimiser = optim.Adam(policy.parameters(), lr=LR)
     memory    = ReplayMemory(MEMORY_CAP)
     print("Created optimizer and memory")
-    
+
+    # Track stats per layout
+    layout_stats = {l: {'wins': 0, 'episodes': 0} for l in layouts}
+
     step = 0
-    
+
     for ep in range(1, episodes + 1):
         # 1. Randomly select a layout for this episode
         current_layout = random.choice(layouts)
         env = PacmanEnv(current_layout)
-        
+
         state, _ = env.reset()
         done, ep_reward = False, 0.0
-        
+
         print(f"[Ep {ep}/{episodes}] Layout: {current_layout}") # Optional: noisy
-        
+
         while not done:
             # Capture state for reward shaping
             prev_pos = env.pac_pos
@@ -75,21 +78,21 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
             if not done and env.pellets:
                 curr_pos = env.pac_pos
                 curr_min_dist = min(abs(p[0] - curr_pos[0]) + abs(p[1] - curr_pos[1]) for p in env.pellets)
-                
+
                 # Ghost avoidance (Manhattan distance)
                 prev_ghost_dist = min(abs(g[0] - prev_pos[0]) + abs(g[1] - prev_pos[1]) for g in env.ghost_pos)
                 curr_ghost_dist = min(abs(g[0] - curr_pos[0]) + abs(g[1] - curr_pos[1]) for g in env.ghost_pos)
 
                 if curr_pos == prev_pos:
                     reward -= 2.0  # Big penalty for hitting wall/staying still
-                
+
                 # Prioritize ghost avoidance if close
                 elif curr_ghost_dist < 5:
                     if curr_ghost_dist < prev_ghost_dist:
                         reward -= 1.0  # Penalty for moving closer to danger
                     elif curr_ghost_dist > prev_ghost_dist:
                         reward += 0.5  # Bonus for escaping
-                
+
                 # Otherwise focus on food
                 elif curr_min_dist < prev_min_dist:
                     reward += 0.5  # Bonus for moving closer
@@ -103,7 +106,7 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
             optimise(memory, policy, target, optimiser, BATCH_SIZE, GAMMA)
             if step % TARGET_FREQ == 0:
                 target.load_state_dict(policy.state_dict())
-        
+
         won = (len(env.pellets) == 0)
         env.close()
 
@@ -111,12 +114,28 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
             result = "WIN " if won else "LOSS"
             print(f"[Ep {ep:4d}] {result} | Layout: {current_layout:15s} | reward = {ep_reward:6.1f}")
 
+            # Update stats
+            layout_stats[current_layout]['episodes'] += 1
+            if won:
+                layout_stats[current_layout]['wins'] += 1
+
     # Save the final "Generalist" model
     if len(layouts) > 1:
         weight_path = Path(f"pacman_dqn_mixed_{model_name}.pt")
     else:
         weight_path = Path(f"pacman_dqn_{layouts[0]}_{model_name}.pt")
-    
+
+    print("\n" + "="*40)
+    print("       TRAINING STATISTICS")
+    print("="*40)
+    for l in layouts:
+        stats = layout_stats[l]
+        n = stats['episodes']
+        w = stats['wins']
+        rate = (w / n * 100) if n > 0 else 0.0
+        print(f"{l:15s} | {n:4d} eps | {w:4d} wins | {rate:5.1f}%")
+    print("="*40 + "\n")
+
     checkpoint = {
         'arch': arch,
         'state_dict': policy.state_dict()
