@@ -20,7 +20,7 @@ NUM_EPISODES_FAST = 200
 TARGET_FREQ       = 200
 BATCH_SIZE        = 128
 MEMORY_CAP        = 20_000
-GAMMA             = 0.99
+GAMMA             = 0.95
 LR                = 1e-3
 EPS               = (1.0, 0.05, 8_000)   # ε‑greedy schedule (start, end, decay)
 
@@ -59,7 +59,7 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
         state, _ = env.reset()
         done, ep_reward = False, 0.0
 
-        print(f"[Ep {ep}/{episodes}] Layout: {current_layout}") # Optional: noisy
+        # print(f"[Ep {ep}/{episodes}] Layout: {current_layout}") # Optional: noisy
 
         while not done:
             # Capture state for reward shaping
@@ -125,6 +125,8 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
     else:
         weight_path = Path(f"pacman_dqn_{layouts[0]}_{model_name}.pt")
 
+    import json
+
     print("\n" + "="*40)
     print("       TRAINING STATISTICS")
     print("="*40)
@@ -135,6 +137,11 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str) -
         rate = (w / n * 100) if n > 0 else 0.0
         print(f"{l:15s} | {n:4d} eps | {w:4d} wins | {rate:5.1f}%")
     print("="*40 + "\n")
+
+    # Save to JSON
+    with open("training_stats.json", "w") as f:
+        json.dump(layout_stats, f, indent=4)
+    print("Saved statistics to training_stats.json")
 
     checkpoint = {
         'arch': arch,
