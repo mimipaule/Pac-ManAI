@@ -10,7 +10,8 @@ import cv2
 
 # ───────── rendering constants ─────────
 PIXELS_PER_CELL = 12          # tile size
-TARGET_SIZE = 84              # Standard deep RL input size
+TARGET_H = 252                # Height of Classic Map
+TARGET_W = 180                # Width of Classic Map
 
 # ───────── 7×7 boards (unchanged) ───────
 tiny_walls = np.array(
@@ -75,9 +76,9 @@ class PacmanEnv(gym.Env):
         self._build_tiles()                   # pixel‑art sprites
 
         self.action_space = spaces.Discrete(4)
-        # IMPORTANT: Force observation space to be fixed size (84x84)
+        # IMPORTANT: Force observation space to be fixed size (Classic dimensions)
         self.observation_space = spaces.Box(
-            0, 255, shape=(TARGET_SIZE, TARGET_SIZE, 3), dtype=np.uint8
+            0, 255, shape=(TARGET_H, TARGET_W, 3), dtype=np.uint8
         )
 
         self.rng = np.random.default_rng()
@@ -246,12 +247,27 @@ class PacmanEnv(gym.Env):
 
     # ──────────────────────── rendering ────────────────────────
     def _get_obs(self) -> np.ndarray:
-        """Return the 84x84 resized observation for the agent."""
+        """Return the padded observation centered on a black canvas."""
         img = self._render_board()
-        # Resize to 84x84 using INTER_AREA for downsampling (best for shrinking)
-        # or INTER_NEAREST if you want to preserve crisp pixel art edges
-        resized = cv2.resize(img, (TARGET_SIZE, TARGET_SIZE), interpolation=cv2.INTER_AREA)
-        return resized
+        h, w, c = img.shape
+        
+        # Create black canvas of Target Size
+        canvas = np.zeros((TARGET_H, TARGET_W, 3), dtype=np.uint8)
+        
+        # Calculate centering offsets
+        y_off = (TARGET_H - h) // 2
+        x_off = (TARGET_W - w) // 2
+        
+        # Clip if the image is larger than target (shouldn't happen if Target is Classic)
+        # But for safety:
+        h_crop = min(h, TARGET_H)
+        w_crop = min(w, TARGET_W)
+        
+        # Paste image into canvas
+        # Note: If img is smaller, y_off is positive. If img is bigger (impossible), we crop.
+        canvas[y_off:y_off+h_crop, x_off:x_off+w_crop] = img[:h_crop, :w_crop]
+        
+        return canvas
 
     def _render_board(self) -> np.ndarray:
         board = np.zeros((self.h, self.w), np.uint8)

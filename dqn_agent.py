@@ -105,7 +105,8 @@ class DQN_Deep(nn.Module):
             nn.Conv2d(C, 32, 8, 4), nn.ReLU(),
             nn.Conv2d(32, 64, 4, 2), nn.ReLU(),
             nn.Conv2d(64, 128, 3, 1), nn.ReLU(),
-            nn.Conv2d(128, 128, 3, 1), nn.ReLU(),  # Added 4th layer
+            nn.Conv2d(128, 128, 3, 1), nn.ReLU(),
+            nn.MaxPool2d(2),  # Added pooling to reduce size for large inputs
             nn.Flatten(),
         )
         with torch.no_grad():
@@ -114,9 +115,8 @@ class DQN_Deep(nn.Module):
         
         # Deeper & Wider FC section
         self.fc = nn.Sequential(
-            nn.Linear(conv_out, 1024), nn.ReLU(),   # Increased to 1024
-            nn.Linear(1024, 512), nn.ReLU(),        # Increased to 512
-            nn.Linear(512, 256), nn.ReLU(),         # Added layer
+            nn.Linear(conv_out, 512), nn.ReLU(),
+            nn.Linear(512, 256), nn.ReLU(),
             nn.Linear(256, n_actions),
         )
     
