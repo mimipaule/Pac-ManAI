@@ -72,14 +72,25 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
     fig.suptitle('Training Progress', fontsize=14, fontweight='bold')
 
     # Initialize step counter
-    # For transfer learning: start with low epsilon (high step count)
-    # For training from scratch: start with high epsilon (step = 0)
+    # Adjust exploration based on layouts and whether we're doing transfer learning
     if load_path:
-        step = 100_000  # This gives epsilon ≈ 0.05 (minimal exploration for fine-tuning)
-        print(f"Transfer learning mode: Starting with low exploration (epsilon ≈ 0.05)")
+        # Adaptive exploration based on target layouts
+        if "classic" in layouts and all(l == "classic" for l in layouts):
+            # Training ONLY on classic: needs significant exploration (it's complex!)
+            step = 40_000  # epsilon ≈ 0.19 (19% exploration)
+            print(f"Transfer learning to classic: Moderate exploration (epsilon ≈ 0.19)")
+        elif "classic" in layouts:
+            # Mixed training including classic: medium exploration
+            step = 70_000  # epsilon ≈ 0.08 (8% exploration)
+            print(f"Transfer learning with classic: Low-medium exploration (epsilon ≈ 0.08)")
+        else:
+            # Small layouts only (empty, spiral, spiral_harder): minimal exploration
+            step = 100_000  # epsilon ≈ 0.05 (5% exploration)
+            print(f"Transfer learning mode: Low exploration (epsilon ≈ 0.05)")
     else:
+        # Training from scratch: full exploration
         step = 0
-        print(f"Training from scratch: Starting with high exploration (epsilon = 1.0)")
+        print(f"Training from scratch: High exploration (epsilon = 1.0)")
 
     for ep in range(1, episodes + 1):
         # 1. Randomly select a layout for this episode
