@@ -71,7 +71,15 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     fig.suptitle('Training Progress', fontsize=14, fontweight='bold')
 
-    step = 0
+    # Initialize step counter
+    # For transfer learning: start with low epsilon (high step count)
+    # For training from scratch: start with high epsilon (step = 0)
+    if load_path:
+        step = 100_000  # This gives epsilon ≈ 0.05 (minimal exploration for fine-tuning)
+        print(f"Transfer learning mode: Starting with low exploration (epsilon ≈ 0.05)")
+    else:
+        step = 0
+        print(f"Training from scratch: Starting with high exploration (epsilon = 1.0)")
 
     for ep in range(1, episodes + 1):
         # 1. Randomly select a layout for this episode
@@ -186,7 +194,7 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
             plt.pause(0.01)
 
         # Save checkpoint every 1000 episodes
-        if ep % 1000 == 0:
+        if ep % 500 == 0:
             # Create directory: checkpoints/<model_name>/
             checkpoint_dir = Path("checkpoints") / model_name
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
