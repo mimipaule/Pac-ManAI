@@ -104,6 +104,26 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
 
             next_state, reward, done, _, _ = env.step(action)
 
+            # Layout-specific reward normalization to ensure fair comparison
+            if done:
+                if len(env.pellets) == 0:  # Win on any layout
+                    reward = 100.0  # Standardized win reward
+                else:  # Loss - use progress-based penalty
+                    if current_layout == "classic":
+                        # Classic: Map [0, 2000] to [-100, -10]
+                        # This preserves "almost winning" vs "dying early" signal
+                        # while ensuring losses are always negative
+                        progress = min(reward / 2000.0, 0.95)
+                        reward = -100.0 + (90.0 * progress)
+                    else:
+                        # Small layouts already give negative rewards on loss
+                        # Keep as-is (typically -30 to -60)
+                        pass
+            else:
+                # Intermediate steps: scale down classic rewards
+                if current_layout == "classic":
+                    reward = reward / 10.0
+
             # REWARD SHAPING: Encourage moving closer to pellets
             if not done and env.pellets:
                 curr_pos = env.pac_pos
