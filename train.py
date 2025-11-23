@@ -201,7 +201,8 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
 
             # Create filename based on layout(s)
             if len(layouts) > 1:
-                checkpoint_filename = f"pacman_dqn_mixed_ep{ep}.pt"
+                layout_tag = "+".join(sorted(layouts))
+                checkpoint_filename = f"pacman_dqn_{layout_tag}_ep{ep}.pt"
             else:
                 checkpoint_filename = f"pacman_dqn_{layouts[0]}_ep{ep}.pt"
 
@@ -216,9 +217,11 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
             torch.save(checkpoint_data, checkpoint_path)
             print(f"\n[Checkpoint] Saved to {checkpoint_path}")
 
-    # Save the final "Generalist" model
+    # Save the final model with appropriate naming
     if len(layouts) > 1:
-        weight_path = Path(f"pacman_dqn_mixed_{model_name}.pt")
+        # For multiple layouts, create a descriptive name
+        layout_tag = "+".join(sorted(layouts))
+        weight_path = Path(f"pacman_dqn_{layout_tag}_{model_name}.pt")
     else:
         weight_path = Path(f"pacman_dqn_{layouts[0]}_{model_name}.pt")
 
@@ -297,7 +300,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--layout", type=str, default=None,
         choices=["classic", "empty", "spiral", "spiral_harder", "mixed"],
-        help="Specific layout to train on, or 'mixed' for all (default: mixed)"
+        help="Single layout to train on, or 'mixed' for all (for backward compatibility)"
+    )
+    parser.add_argument(
+        "--layouts", type=str, nargs='+', default=None,
+        choices=["classic", "empty", "spiral", "spiral_harder"],
+        help="Multiple layouts for cumulative training (e.g., --layouts empty spiral)"
     )
     parser.add_argument(
         "--fast", action="store_true",
@@ -319,11 +327,15 @@ if __name__ == "__main__":
     episodes = NUM_EPISODES_FAST if args.fast else NUM_EPISODES
 
     # Define the list of layouts to train on
-    if args.layout == "mixed" or args.layout is None:
+    if args.layouts:
+        # Custom layout combination (cumulative transfer learning)
+        layouts_to_train = args.layouts
+        print(f"Cumulative training mode: {' + '.join(layouts_to_train)}")
+        train_mixed(layouts_to_train, episodes, args.name, args.arch, args.load)
+    elif args.layout == "mixed" or args.layout is None:
         # Train on ALL layouts randomly
         layouts_to_train = ["classic", "empty", "spiral", "spiral_harder"]
         train_mixed(layouts_to_train, episodes, args.name, args.arch, args.load)
     else:
-        # Train on a single specific layout (legacy mode)
-        # We can re-use the mixed trainer with a list of length 1
+        # Train on a single specific layout
         train_mixed([args.layout], episodes, args.name, args.arch, args.load)
