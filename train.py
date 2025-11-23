@@ -13,6 +13,7 @@ from pathlib import Path
 from pacman_env import PacmanEnv
 import random
 from dqn_agent import get_arch, ReplayMemory, select_action, optimise, DEVICE
+import matplotlib.pyplot as plt
 
 # ───────── hyper‑parameters ─────────
 NUM_EPISODES      = 1000
@@ -59,6 +60,16 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
 
     # Track stats per layout
     layout_stats = {l: {'wins': 0, 'episodes': 0} for l in layouts}
+
+    # Track rewards for plotting
+    episode_rewards = []
+    episode_numbers = []
+    episode_wins = []  # Track wins (1) and losses (0)
+
+    # Setup matplotlib for live plotting with two subplots
+    plt.ion()
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    fig.suptitle('Training Progress', fontsize=14, fontweight='bold')
 
     step = 0
 
@@ -123,14 +134,56 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
         won = (len(env.pellets) == 0)
         env.close()
 
+        # Track rewards and wins
+        episode_rewards.append(ep_reward)
+        episode_numbers.append(ep)
+        episode_wins.append(1 if won else 0)
+
         if True:  # Print every episode
             result = "WIN " if won else "LOSS"
-            print(f"[Ep {ep:4d}] {result} | Layout: {current_layout:15s} | reward = {ep_reward:6.1f}")
+            print(f"[Ep {ep:4d}] {result} | Layout: {current_layout:15s} | reward = {ep_reward:7.1f}")
 
             # Update stats
             layout_stats[current_layout]['episodes'] += 1
             if won:
                 layout_stats[current_layout]['wins'] += 1
+
+        # Update plot every 10 episodes
+        if ep % 10 == 0:
+            # Plot 1: Win Rate (more stable metric)
+            ax1.clear()
+            if len(episode_wins) >= 10:
+                window = min(50, len(episode_wins))
+                win_rates = [sum(episode_wins[max(0, i-window+1):i+1]) / window * 100
+                            for i in range(len(episode_wins))]
+                ax1.plot(episode_numbers, win_rates, 'g-', linewidth=2, label=f'{window}-Episode Win Rate')
+                ax1.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='50% Target')
+
+            ax1.set_xlabel('Episode')
+            ax1.set_ylabel('Win Rate (%)')
+            ax1.set_title(f'Win Rate Over Time (Ep {ep}/{episodes})')
+            ax1.grid(True, alpha=0.3)
+            ax1.legend()
+            ax1.set_ylim(-5, 105)
+
+            # Plot 2: Rewards (with moving average)
+            ax2.clear()
+            ax2.plot(episode_numbers, episode_rewards, alpha=0.3, linewidth=1, color='blue', label='Episode Reward')
+
+            if len(episode_rewards) >= 10:
+                window = min(50, len(episode_rewards))
+                moving_avg = [sum(episode_rewards[max(0, i-window+1):i+1]) / window
+                              for i in range(len(episode_rewards))]
+                ax2.plot(episode_numbers, moving_avg, 'r-', linewidth=2, label=f'{window}-Episode Avg Reward')
+
+            ax2.set_xlabel('Episode')
+            ax2.set_ylabel('Reward')
+            ax2.set_title('Episode Rewards')
+            ax2.grid(True, alpha=0.3)
+            ax2.legend()
+
+            plt.tight_layout()
+            plt.pause(0.01)
 
         # Save checkpoint every 1000 episodes
         if ep % 1000 == 0:
@@ -178,6 +231,49 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
     with open("training_stats.json", "w") as f:
         json.dump(layout_stats, f, indent=4)
     print("Saved statistics to training_stats.json")
+
+    # Save final plot
+    plt.ioff()
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    fig.suptitle(f'Training Progress: {layouts} - {model_name}', fontsize=14, fontweight='bold')
+
+    # Plot 1: Win Rate
+    if len(episode_wins) >= 10:
+        window = min(50, len(episode_wins))
+        win_rates = [sum(episode_wins[max(0, i-window+1):i+1]) / window * 100
+                    for i in range(len(episode_wins))]
+        ax1.plot(episode_numbers, win_rates, 'g-', linewidth=2, label=f'{window}-Episode Win Rate')
+        ax1.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='50% Target')
+
+    ax1.set_xlabel('Episode', fontsize=11)
+    ax1.set_ylabel('Win Rate (%)', fontsize=11)
+    ax1.set_title('Win Rate Over Time', fontsize=12)
+    ax1.grid(True, alpha=0.3)
+    ax1.legend()
+    ax1.set_ylim(-5, 105)
+
+    # Plot 2: Rewards
+    ax2.plot(episode_numbers, episode_rewards, alpha=0.3, linewidth=1, color='blue', label='Episode Reward')
+
+    if len(episode_rewards) >= 10:
+        window = min(50, len(episode_rewards))
+        moving_avg = [sum(episode_rewards[max(0, i-window+1):i+1]) / window
+                      for i in range(len(episode_rewards))]
+        ax2.plot(episode_numbers, moving_avg, 'r-', linewidth=2, label=f'{window}-Episode Avg Reward')
+
+    ax2.set_xlabel('Episode', fontsize=11)
+    ax2.set_ylabel('Reward', fontsize=11)
+    ax2.set_title('Episode Rewards', fontsize=12)
+    ax2.grid(True, alpha=0.3)
+    ax2.legend()
+
+    plt.tight_layout()
+
+    # Save plot
+    plot_path = Path(f"training_plot_{model_name}.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    print(f"Saved training plot to {plot_path}")
+    plt.close()
 
     checkpoint = {
         'arch': arch,
