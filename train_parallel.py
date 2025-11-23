@@ -291,7 +291,7 @@ if __name__ == "__main__":
                         choices=["classic", "empty", "spiral", "spiral_harder", "mixed"])
     parser.add_argument("--episodes", type=int, default=NUM_EPISODES_TOTAL)
     parser.add_argument("--name", type=str, default="default")
-    parser.add_argument("--arch", type=str, default="original", choices=["original", "deep_v1"])
+    parser.add_argument("--arch", type=str, default="original", choices=["original", "deep_v1", "multiscale"])
     parser.add_argument("--workers", type=int, default=10, help="Number of parallel envs")
     parser.add_argument("--load", type=str, default=None, help="Path to .pt file to load weights from")
 

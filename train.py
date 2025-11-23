@@ -300,7 +300,7 @@ if __name__ == "__main__":
         help="A name for the model version, used for the saved file"
     )
     parser.add_argument(
-        "--arch", type=str, default="original", choices=["original", "deep_v1"],
+        "--arch", type=str, default="original", choices=["original", "deep_v1", "multiscale"],
         help="Network architecture to use (default: original)"
     )
     parser.add_argument(

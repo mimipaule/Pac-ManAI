@@ -124,12 +124,65 @@ class DQN_Deep(nn.Module):
         x = x.float().permute(0, 3, 1, 2) / 255.0
         return self.fc(self.conv(x))
 
+class DQN_MultiScale(nn.Module):
+    """
+    Multi-scale Architecture:
+    - Branch A (Local): High-res processing for immediate surroundings (walls, ghosts nearby)
+    - Branch B (Global): Low-res processing for map-level context (where are pellets?)
+    """
+    def __init__(self, obs_shape: Tuple[int, int, int], n_actions: int):
+        super().__init__()
+        H, W, C = obs_shape
+        
+        # Branch A: Local Details (Smaller stride, keeps spatial res longer)
+        self.local_stream = nn.Sequential(
+            nn.Conv2d(C, 16, kernel_size=5, stride=2), 
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=3, stride=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Flatten()
+        )
+        
+        # Branch B: Global Context (Aggressive downsampling like original DQN)
+        self.global_stream = nn.Sequential(
+            nn.Conv2d(C, 16, kernel_size=8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=1),
+            nn.ReLU(),
+            nn.Flatten()
+        )
+        
+        # Calculate merged size
+        with torch.no_grad():
+            dummy = torch.zeros(1, C, H, W)
+            local_out = self.local_stream(dummy).shape[1]
+            global_out = self.global_stream(dummy).shape[1]
+            merged_size = local_out + global_out
+            
+        self.fc = nn.Sequential(
+            nn.Linear(merged_size, 512), nn.ReLU(),
+            nn.Linear(512, 256), nn.ReLU(),
+            nn.Linear(256, n_actions)
+        )
+
+    def forward(self, x: torch.Tensor):
+        x = x.float().permute(0, 3, 1, 2) / 255.0
+        local_feat = self.local_stream(x)
+        global_feat = self.global_stream(x)
+        merged = torch.cat([local_feat, global_feat], dim=1)
+        return self.fc(merged)
+
 def get_arch(arch_name: str, obs_shape: Tuple[int, int, int], n_actions: int) -> nn.Module:
     """Factory function to return the requested network architecture."""
     if arch_name == "original":
         return DQN(obs_shape, n_actions)
     elif arch_name == "deep_v1":
         return DQN_Deep(obs_shape, n_actions)
+    elif arch_name == "multiscale":
+        return DQN_MultiScale(obs_shape, n_actions)
     else:
         raise ValueError(f"Unknown architecture: {arch_name}")
 
