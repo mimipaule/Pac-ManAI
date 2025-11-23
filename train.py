@@ -71,9 +71,6 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     fig.suptitle('Training Progress', fontsize=14, fontweight='bold')
 
-    # Exploration until first win
-    first_win_achieved = False
-    first_win_step = 0
     step = 0
 
     for ep in range(1, episodes + 1):
@@ -94,16 +91,7 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
             if env.pellets:
                 prev_min_dist = min(abs(p[0] - prev_pos[0]) + abs(p[1] - prev_pos[1]) for p in env.pellets)
 
-            # Modified epsilon logic: high exploration until first win
-            if not first_win_achieved:
-                # High exploration (95-100% random) until first win
-                eps_override = (1.0, 0.95, 100)  # Almost pure random
-                action = select_action(state, policy, step, *eps_override)
-            else:
-                # Start epsilon decay from 0 after first win
-                steps_since_win = step - first_win_step
-                action = select_action(state, policy, steps_since_win, *EPS)
-
+            action = select_action(state, policy, step, *EPS)
             step += 1
 
             next_state, reward, done, _, _ = env.step(action)
@@ -146,15 +134,6 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
         won = (len(env.pellets) == 0)
         env.close()
 
-        # Check if this is the first win
-        if won and not first_win_achieved:
-            first_win_achieved = True
-            first_win_step = step
-            print(f"\n{'='*60}")
-            print(f"🎉 FIRST WIN at Episode {ep} (Step {step})!")
-            print(f"Now starting epsilon decay from 1.0 → 0.05 over {EPS[2]} steps")
-            print(f"{'='*60}\n")
-
         # Track rewards and wins
         episode_rewards.append(ep_reward)
         episode_numbers.append(ep)
@@ -162,8 +141,7 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
 
         if True:  # Print every episode
             result = "WIN " if won else "LOSS"
-            exploration_mode = "[EXPLORING]" if not first_win_achieved else "[LEARNING]"
-            print(f"[Ep {ep:4d}] {result} | {exploration_mode:12s} | Layout: {current_layout:15s} | reward = {ep_reward:7.1f}")
+            print(f"[Ep {ep:4d}] {result} | Layout: {current_layout:15s} | reward = {ep_reward:7.1f}")
 
             # Update stats
             layout_stats[current_layout]['episodes'] += 1
