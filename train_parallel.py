@@ -22,14 +22,15 @@ from dqn_agent import get_arch, ReplayMemory, optimise, DEVICE
 # ───────── hyper‑parameters ─────────
 NUM_EPISODES_TOTAL = 2000      # Total episodes across all workers
 NUM_ENVS = 10                  # Number of parallel environments
-BATCH_SIZE = 128
-MEMORY_CAP = 20_000
+BATCH_SIZE = 256       # Increased for GPU efficiency
+MEMORY_CAP = 50_000      # Increased buffer size
 GAMMA = 0.99
 LR = 1e-3
 # ε‑greedy schedule (start, end, decay_steps)
 # Note: decay is based on global steps, which accumulate faster with N envs
 EPS_PARAMS = (1.0, 0.05, 20_000)
 TARGET_FREQ = 200              # Target network update frequency (global steps)
+UPDATES_PER_STEP = 2           # Perform multiple updates per step to keep up with data collection
 
 def make_env(layout_list: list[str]):
     """Factory function to create an environment with a random layout from the list."""
@@ -126,6 +127,21 @@ def train_parallel(layouts: list[str], total_episodes: int, model_name: str, arc
     # Reset all envs initially
     states, _ = envs.reset()
 
+    # Warmup phase: fill memory with random actions before training
+    print(f"Warming up replay memory with {BATCH_SIZE} transitions...")
+    warmup_steps = 0
+    while len(memory) < BATCH_SIZE:
+        # Use random actions for warmup
+        actions = [random.randrange(n_actions) for _ in range(NUM_ENVS)]
+        next_states, rewards, terminations, truncations, infos = envs.step(actions)
+        dones = terminations | truncations
+        for i in range(NUM_ENVS):
+            real_next_state = next_states[i]
+            if dones[i] and "final_observation" in infos and infos["_final_observation"][i]:
+                real_next_state = infos["final_observation"][i]
+            memory.push(states[i], actions[i], rewards[i], real_next_state, float(dones[i]))
+        states = next_states
+
     global_step = 0
     episodes_finished = 0
 
@@ -200,7 +216,10 @@ def train_parallel(layouts: list[str], total_episodes: int, model_name: str, arc
         global_step += NUM_ENVS # We took N steps total
 
         # D. Optimization Step
-        optimise(memory, policy, target, optimiser, BATCH_SIZE, GAMMA)
+        # Since we collect NUM_ENVS steps of data per loop, we should ideally do
+        # multiple gradient updates to keep the 'replay ratio' healthy.
+        for _ in range(UPDATES_PER_STEP):
+            optimise(memory, policy, target, optimiser, BATCH_SIZE, GAMMA)
 
         # E. Target Network Update
         if global_step % TARGET_FREQ < NUM_ENVS:
