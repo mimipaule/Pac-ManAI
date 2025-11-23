@@ -115,52 +115,61 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
 
             next_state, reward, done, _, _ = env.step(action)
 
-            # Layout-specific reward normalization to ensure fair comparison
+            # Intermediate reward scaling for classic (before shaping)
+            if not done and current_layout == "classic":
+                reward = reward / 10.0
+
+            # SIMPLIFIED REWARD SHAPING: Only penalize wasteful wall-hitting
+            # Environment already rewards pellets (+10) and penalizes death (-50)
+            # So we only add a small penalty for hitting walls to avoid wasted moves
+            if not done:
+                curr_pos = env.pac_pos
+
+                if current_layout == "classic":
+                    # Classic: minimal shaping, trust the base rewards
+                    if curr_pos == prev_pos:
+                        reward -= 0.2  # Small penalty for hitting wall (scaled for classic)
+                else:
+                    # Small layouts: keep more aggressive shaping
+                    if curr_pos == prev_pos:
+                        reward -= 2.0  # Penalty for hitting wall/staying still
+
+                    elif env.pellets:
+                        # Only apply pellet/ghost shaping for small layouts
+                        curr_min_dist = min(abs(p[0] - curr_pos[0]) + abs(p[1] - curr_pos[1]) for p in env.pellets)
+                        prev_ghost_dist = min(abs(g[0] - prev_pos[0]) + abs(g[1] - prev_pos[1]) for g in env.ghost_pos)
+                        curr_ghost_dist = min(abs(g[0] - curr_pos[0]) + abs(g[1] - curr_pos[1]) for g in env.ghost_pos)
+
+                        # Ghost avoidance if close
+                        if curr_ghost_dist < 5:
+                            if curr_ghost_dist < prev_ghost_dist:
+                                reward -= 1.0  # Moving closer to danger
+                            elif curr_ghost_dist > prev_ghost_dist:
+                                reward += 0.5  # Escaping
+                            else:
+                                reward -= 0.3  # Staying same distance
+                        # Pellet approach
+                        elif curr_min_dist < prev_min_dist:
+                            reward += 0.5  # Moving toward pellet
+                        elif curr_min_dist >= prev_min_dist:
+                            reward -= 0.1  # Moving away
+
+            # Layout-specific reward normalization (AFTER shaping)
+            # This ensures shaped rewards stay in reasonable range
             if done:
                 if len(env.pellets) == 0:  # Win on any layout
                     reward = 100.0  # Standardized win reward
                 else:  # Loss - use progress-based penalty
                     if current_layout == "classic":
-                        # Classic: Map [0, 2000] to [-100, -10]
-                        # This preserves "almost winning" vs "dying early" signal
-                        # while ensuring losses are always negative
-                        progress = min(reward / 2000.0, 0.95)
+                        # For classic, we accumulated scaled rewards
+                        # Typical loss reward range after shaping: -50 to +150
+                        # Map to [-100, -10]
+                        progress = max(0, min(reward / 150.0, 0.95))
                         reward = -100.0 + (90.0 * progress)
                     else:
-                        # Small layouts already give negative rewards on loss
-                        # Keep as-is (typically -30 to -60)
+                        # Small layouts: keep original negative rewards
+                        # Already in good range (-30 to -60)
                         pass
-            else:
-                # Intermediate steps: scale down classic rewards
-                if current_layout == "classic":
-                    reward = reward / 10.0
-
-            # REWARD SHAPING: Encourage moving closer to pellets
-            if not done and env.pellets:
-                curr_pos = env.pac_pos
-                curr_min_dist = min(abs(p[0] - curr_pos[0]) + abs(p[1] - curr_pos[1]) for p in env.pellets)
-
-                # Ghost avoidance (Manhattan distance)
-                prev_ghost_dist = min(abs(g[0] - prev_pos[0]) + abs(g[1] - prev_pos[1]) for g in env.ghost_pos)
-                curr_ghost_dist = min(abs(g[0] - curr_pos[0]) + abs(g[1] - curr_pos[1]) for g in env.ghost_pos)
-
-                if curr_pos == prev_pos:
-                    reward -= 2.0  # Big penalty for hitting wall/staying still
-
-                # Prioritize ghost avoidance if close
-                elif curr_ghost_dist < 5:
-                    if curr_ghost_dist < prev_ghost_dist:
-                        reward -= 1.0  # Penalty for moving closer to danger
-                    elif curr_ghost_dist > prev_ghost_dist:
-                        reward += 0.5  # Bonus for escaping
-                    else:
-                        reward -= 0.3  # Penalty for staying in the same place
-
-                # Otherwise focus on food
-                elif curr_min_dist < prev_min_dist:
-                    reward += 0.5  # Bonus for moving closer
-                elif curr_min_dist >= prev_min_dist:
-                    reward -= 0.1  # Penalty for moving away
 
             memory.push(state, action, reward, next_state, float(done))
             state = next_state
