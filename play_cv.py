@@ -109,24 +109,12 @@ def play_headless(layout: str, net: nn.Module, episodes: int):
     for ep in range(1, episodes + 1):
         state, _ = env.reset()
         done, step, win = False, 0, False
-        
-        print(f"\nEpisode {ep}/{episodes}: Starting game")
         initial_pellets = len(env.pellets)
-        print(f"  Initial pellets: {initial_pellets}")
-        print(f"  Starting position: Pac-Man at {env.pac_pos}, Ghost(s) at {env.ghost_pos}")
 
         while not done and step < 1000:
             with torch.no_grad():
                 q_values = net(torch.as_tensor(state, device=DEVICE).unsqueeze(0))
                 action = int(q_values.argmax())
-            
-            # Print action details for first few steps or periodically
-            if step < 5 or step % 100 == 0:
-                actions = ['UP', 'DOWN', 'LEFT', 'RIGHT']
-                q_vals = q_values.squeeze().cpu().numpy()
-                print(f"  Step {step}: Action={actions[action]}, "
-                      f"Q-values={[f'{q:.2f}' for q in q_vals]}, "
-                      f"Pellets left: {len(env.pellets)}")
             
             state, reward, done, _, _ = env.step(action)
             step += 1
@@ -137,9 +125,7 @@ def play_headless(layout: str, net: nn.Module, episodes: int):
         wins += win
         pellets_collected = initial_pellets - len(env.pellets)
         result = "WIN" if win else "LOSE"
-        print(f"Episode {ep}: {result} in {step} steps")
-        print(f"  Pellets collected: {pellets_collected}/{initial_pellets}")
-        print(f"  Final position: Pac-Man at {env.pac_pos}, Ghost(s) at {env.ghost_pos}")
+        print(f"Episode {ep}/{episodes}: {result} in {step} steps | Pellets: {pellets_collected}/{initial_pellets}")
 
     print(f"\n{'='*50}")
     print(f"FINAL RESULTS:")
