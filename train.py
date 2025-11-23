@@ -18,11 +18,11 @@ from dqn_agent import get_arch, ReplayMemory, select_action, optimise, DEVICE
 NUM_EPISODES      = 1000
 NUM_EPISODES_FAST = 200
 TARGET_FREQ       = 200
-BATCH_SIZE        = 128
-MEMORY_CAP        = 20_000
+BATCH_SIZE        = 256
+MEMORY_CAP        = 100_000
 GAMMA             = 0.95
 LR                = 1e-3
-EPS               = (1.0, 0.05, 8_000)   # ε‑greedy schedule (start, end, decay)
+EPS               = (1.0, 0.05, 20_000)   # ε‑greedy schedule (start, end, decay)
 
 # ───────── single‑layout trainer ─────────
 def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, load_path: str = None) -> Path:
@@ -31,15 +31,15 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
     obs_shape = tmp_env.observation_space.shape
     n_actions = tmp_env.action_space.n
     tmp_env.close()
-    
+
     print(f"Initializing Multi-Task Training on: {layouts}")
     print(f"Architecture: {arch}")
     print(f"Using device: {DEVICE}")
-    
+
     # Use factory to create networks
     policy = get_arch(arch, obs_shape, n_actions).to(DEVICE)
     target = get_arch(arch, obs_shape, n_actions).to(DEVICE)
-    
+
     if load_path:
         print(f"Loading pre-trained weights from: {load_path}")
         checkpoint = torch.load(load_path, map_location=DEVICE)
@@ -51,7 +51,7 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
         print("Weights loaded successfully!")
 
     target.load_state_dict(policy.state_dict())
-    
+
     print("Created policy and target networks")
     optimiser = optim.Adam(policy.parameters(), lr=LR)
     memory    = ReplayMemory(MEMORY_CAP)
