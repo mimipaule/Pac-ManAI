@@ -77,8 +77,8 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
         # Adaptive exploration based on target layouts
         if "classic" in layouts and all(l == "classic" for l in layouts):
             # Training ONLY on classic: needs significant exploration (it's complex!)
-            step = 40_000  # epsilon ≈ 0.19 (19% exploration)
-            print(f"Transfer learning to classic: Moderate exploration (epsilon ≈ 0.19)")
+            step = 25_000  # epsilon ≈ 0.30 (30% exploration)
+            print(f"Transfer learning to classic: Higher exploration (epsilon ≈ 0.30)")
         elif "classic" in layouts:
             # Mixed training including classic: medium exploration
             step = 70_000  # epsilon ≈ 0.08 (8% exploration)
@@ -115,22 +115,39 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
 
             next_state, reward, done, _, _ = env.step(action)
 
-            # Intermediate reward scaling for classic (before shaping)
-            if not done and current_layout == "classic":
-                reward = reward / 10.0
-
-            # SIMPLIFIED REWARD SHAPING: Only penalize wasteful wall-hitting
+            # IMPROVED REWARD SHAPING: Consistent scaling across all layouts
             # Environment already rewards pellets (+10) and penalizes death (-50)
-            # So we only add a small penalty for hitting walls to avoid wasted moves
+            # Add meaningful penalties/rewards to guide learning
             if not done:
                 curr_pos = env.pac_pos
 
                 if current_layout == "classic":
-                    # Classic: minimal shaping, trust the base rewards
+                    # Classic: Stronger shaping to help learn complex ghost avoidance
+                    # No reward scaling - keep pellets at +10 for strong positive signal
                     if curr_pos == prev_pos:
-                        reward -= 0.2  # Small penalty for hitting wall (scaled for classic)
+                        reward -= 2.0  # Penalty for hitting wall (matches pellet scale)
+
+                    # Add ghost avoidance and pellet seeking for classic
+                    elif env.pellets and env.ghost_pos:
+                        curr_min_dist = min(abs(p[0] - curr_pos[0]) + abs(p[1] - curr_pos[1]) for p in env.pellets)
+                        prev_ghost_dist = min(abs(g[0] - prev_pos[0]) + abs(g[1] - prev_pos[1]) for g in env.ghost_pos)
+                        curr_ghost_dist = min(abs(g[0] - curr_pos[0]) + abs(g[1] - curr_pos[1]) for g in env.ghost_pos)
+
+                        # Ghost avoidance is critical - stronger signals
+                        if curr_ghost_dist < 5:
+                            if curr_ghost_dist < prev_ghost_dist:
+                                reward -= 3.0  # Strong penalty for approaching ghosts
+                            elif curr_ghost_dist > prev_ghost_dist:
+                                reward += 2.0  # Good reward for escaping
+                            else:
+                                reward -= 0.5  # Small penalty for staying same distance
+                        # Pellet approach (secondary priority)
+                        elif curr_min_dist < prev_min_dist:
+                            reward += 1.0  # Reward for approaching pellets
+                        elif curr_min_dist > prev_min_dist:
+                            reward -= 0.5  # Small penalty for moving away
                 else:
-                    # Small layouts: keep more aggressive shaping
+                    # Small layouts: keep existing shaping (it works well)
                     if curr_pos == prev_pos:
                         reward -= 2.0  # Penalty for hitting wall/staying still
 
