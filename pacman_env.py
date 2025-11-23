@@ -137,13 +137,13 @@ class PacmanEnv(gym.Env):
         self.pac_pos = (px, py)
 
         reward, terminated = -0.1, False
-        
+
         # CHECK 1: Collision immediately after Pac-Man moves
         if self.pac_pos in self.ghost_pos:
             reward -= 50
             terminated = True
             return self._get_obs(), reward, terminated, False, {}
-        
+
         if self.pac_pos in self.pellets:
             self.pellets.remove(self.pac_pos); reward += 10
             if not self.pellets: reward += 50; terminated = True
@@ -250,23 +250,23 @@ class PacmanEnv(gym.Env):
         """Return the padded observation centered on a black canvas."""
         img = self._render_board()
         h, w, c = img.shape
-        
+
         # Create black canvas of Target Size
-        canvas = np.zeros((TARGET_H, TARGET_W, 3), dtype=np.uint8)
-        
+        canvas = np.full((TARGET_H, TARGET_W, 3), [80, 80, 80], dtype=np.uint8)  # Gray walls
+
         # Calculate centering offsets
         y_off = (TARGET_H - h) // 2
         x_off = (TARGET_W - w) // 2
-        
+
         # Clip if the image is larger than target (shouldn't happen if Target is Classic)
         # But for safety:
         h_crop = min(h, TARGET_H)
         w_crop = min(w, TARGET_W)
-        
+
         # Paste image into canvas
         # Note: If img is smaller, y_off is positive. If img is bigger (impossible), we crop.
         canvas[y_off:y_off+h_crop, x_off:x_off+w_crop] = img[:h_crop, :w_crop]
-        
+
         return canvas
 
     def _render_board(self) -> np.ndarray:

@@ -19,7 +19,7 @@ NUM_EPISODES      = 1000
 NUM_EPISODES_FAST = 200
 TARGET_FREQ       = 200
 BATCH_SIZE        = 256
-MEMORY_CAP        = 100_000
+MEMORY_CAP        = 20_000
 GAMMA             = 0.95
 LR                = 1e-3
 EPS               = (1.0, 0.05, 20_000)   # ε‑greedy schedule (start, end, decay)
@@ -103,6 +103,8 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
                         reward -= 1.0  # Penalty for moving closer to danger
                     elif curr_ghost_dist > prev_ghost_dist:
                         reward += 0.5  # Bonus for escaping
+                    else:
+                        reward -= 0.3  # Penalty for staying in the same place
 
                 # Otherwise focus on food
                 elif curr_min_dist < prev_min_dist:
