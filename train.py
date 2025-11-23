@@ -132,6 +132,29 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
             if won:
                 layout_stats[current_layout]['wins'] += 1
 
+        # Save checkpoint every 1000 episodes
+        if ep % 1000 == 0:
+            # Create directory: checkpoints/<model_name>/
+            checkpoint_dir = Path("checkpoints") / model_name
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create filename based on layout(s)
+            if len(layouts) > 1:
+                checkpoint_filename = f"pacman_dqn_mixed_ep{ep}.pt"
+            else:
+                checkpoint_filename = f"pacman_dqn_{layouts[0]}_ep{ep}.pt"
+
+            checkpoint_path = checkpoint_dir / checkpoint_filename
+
+            checkpoint_data = {
+                'arch': arch,
+                'state_dict': policy.state_dict(),
+                'episode': ep,
+                'step': step
+            }
+            torch.save(checkpoint_data, checkpoint_path)
+            print(f"\n[Checkpoint] Saved to {checkpoint_path}")
+
     # Save the final "Generalist" model
     if len(layouts) > 1:
         weight_path = Path(f"pacman_dqn_mixed_{model_name}.pt")
