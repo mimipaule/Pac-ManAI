@@ -10,8 +10,8 @@ import cv2
 
 # ───────── rendering constants ─────────
 PIXELS_PER_CELL = 12          # tile size
-TARGET_H = 252                # Height of Classic Map
-TARGET_W = 180                # Width of Classic Map
+TARGET_H = 180                # Height of Classic Map (15 * 12)
+TARGET_W = 252                # Width of Classic Map (21 * 12)
 
 # ───────── 7×7 boards (unchanged) ───────
 tiny_walls = np.array(
