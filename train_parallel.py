@@ -24,7 +24,7 @@ NUM_EPISODES_TOTAL = 2000      # Total episodes across all workers
 NUM_ENVS = 10                  # Number of parallel environments
 BATCH_SIZE = 256       # Increased for GPU efficiency
 MEMORY_CAP = 50_000      # Increased buffer size
-GAMMA = 0.99
+GAMMA = 0.95
 LR = 1e-3
 # ε‑greedy schedule (start, end, decay_steps)
 # Note: decay is based on global steps, which accumulate faster with N envs
@@ -228,9 +228,25 @@ def train_parallel(layouts: list[str], total_episodes: int, model_name: str, arc
 
         # F. Logging
         if episodes_finished % 10 == 0 and episodes_finished > 0:
-            # We can't easily print "Episode X finished" continuously because they finish randomly.
-            # Just print status every 50 episodes finished.
             print(f"Progress: {episodes_finished}/{total_episodes} eps | Global Step: {global_step}", end='\r')
+
+        # G. Save Checkpoints Periodically
+        if episodes_finished % 1000 == 0 and episodes_finished > 0:
+            # Create directory: checkpoints/<model_name>
+            save_dir = Path("checkpoints") / model_name
+            save_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create filename: pacman_mixed_ep1000.pt
+            layout_tag = "mixed" if len(layouts) > 1 else layouts[0]
+            filename = f"pacman_{layout_tag}_ep{episodes_finished}.pt"
+            save_path = save_dir / filename
+
+            torch.save({
+                'arch': arch,
+                'state_dict': policy.state_dict(),
+                'episode': episodes_finished
+            }, save_path)
+            print(f"\nCheckpoint saved: {save_path}")
 
     print(f"\nTraining finished after {episodes_finished} episodes.")
 
@@ -255,17 +271,19 @@ def train_parallel(layouts: list[str], total_episodes: int, model_name: str, arc
 
     envs.close()
 
-    # Save
-    if len(layouts) > 1:
-        weight_path = Path(f"pacman_dqn_mixed_parallel_{model_name}.pt")
-    else:
-        weight_path = Path(f"pacman_dqn_{layouts[0]}_parallel_{model_name}.pt")
+    # Final Save
+    save_dir = Path("checkpoints") / model_name
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    layout_tag = "mixed" if len(layouts) > 1 else layouts[0]
+    final_path = save_dir / f"pacman_{layout_tag}_final.pt"
 
     torch.save({
         'arch': arch,
-        'state_dict': policy.state_dict()
-    }, weight_path)
-    print(f"Saved model to {weight_path}")
+        'state_dict': policy.state_dict(),
+        'episode': episodes_finished
+    }, final_path)
+    print(f"Saved final model to {final_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train DQN using Parallel Environments")
