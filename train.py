@@ -16,14 +16,15 @@ from dqn_agent import get_arch, ReplayMemory, select_action, optimise, DEVICE
 import matplotlib.pyplot as plt
 
 # ───────── hyper‑parameters ─────────
-NUM_EPISODES      = 1000
-NUM_EPISODES_FAST = 200
-TARGET_FREQ       = 200
+NUM_EPISODES      = 10_000  # Increased for longer training
+NUM_EPISODES_FAST = 500     # Increased proportionally
+TARGET_FREQ       = 500     # Update target network less frequently for stability
 BATCH_SIZE        = 256
-MEMORY_CAP        = 20_000
-GAMMA             = 0.95
-LR                = 1e-3
-EPS               = (1.0, 0.05, 20_000)   # ε‑greedy schedule (start, end, decay)
+MEMORY_CAP        = 50_000  # Increased for more diverse experiences
+GAMMA             = 0.99    # Slightly higher discount for long-term planning
+LR                = 5e-4    # Lower learning rate for stability over long training
+EPS               = (1.0, 0.05, 100_000)  # Longer epsilon decay for 10k episodes
+MAX_STEPS_PER_EPISODE = 5000  # Prevent infinite episodes
 
 # ───────── single‑layout trainer ─────────
 def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, load_path: str = None) -> Path:
@@ -73,16 +74,17 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
 
     # Initialize step counter
     # Adjust exploration based on layouts and whether we're doing transfer learning
+    # With EPS_DECAY = 100_000, epsilon calculation: eps = eps_end + (eps_start - eps_end) * exp(-step / decay)
     if load_path:
         # Adaptive exploration based on target layouts
         if "classic" in layouts and all(l == "classic" for l in layouts):
             # Training ONLY on classic: needs significant exploration (it's complex!)
-            step = 25_000  # epsilon ≈ 0.30 (30% exploration)
-            print(f"Transfer learning to classic: Higher exploration (epsilon ≈ 0.30)")
+            step = 50_000  # epsilon ≈ 0.35 (35% exploration) - higher for longer training
+            print(f"Transfer learning to classic: Higher exploration (epsilon ≈ 0.35)")
         elif "classic" in layouts:
             # Mixed training including classic: medium exploration
-            step = 70_000  # epsilon ≈ 0.08 (8% exploration)
-            print(f"Transfer learning with classic: Low-medium exploration (epsilon ≈ 0.08)")
+            step = 80_000  # epsilon ≈ 0.10 (10% exploration)
+            print(f"Transfer learning with classic: Medium exploration (epsilon ≈ 0.10)")
         else:
             # Small layouts only (empty, spiral, spiral_harder): minimal exploration
             step = 100_000  # epsilon ≈ 0.05 (5% exploration)
@@ -99,10 +101,11 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
 
         state, _ = env.reset()
         done, ep_reward = False, 0.0
+        episode_steps = 0
 
         # print(f"[Ep {ep}/{episodes}] Layout: {current_layout}") # Optional: noisy
 
-        while not done:
+        while not done and episode_steps < MAX_STEPS_PER_EPISODE:
             # Capture state for reward shaping
             prev_pos = env.pac_pos
             # Find distance to closest pellet
@@ -112,20 +115,21 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
 
             action = select_action(state, policy, step, *EPS)
             step += 1
+            episode_steps += 1
 
             next_state, reward, done, _, _ = env.step(action)
 
-            # IMPROVED REWARD SHAPING: Consistent scaling across all layouts
+            # FIXED REWARD SHAPING: Subtle hints, not dominating penalties
             # Environment already rewards pellets (+10) and penalizes death (-50)
-            # Add meaningful penalties/rewards to guide learning
+            # Shaping should be 10x smaller than base rewards
             if not done:
                 curr_pos = env.pac_pos
 
                 if current_layout == "classic":
-                    # Classic: Stronger shaping to help learn complex ghost avoidance
-                    # No reward scaling - keep pellets at +10 for strong positive signal
+                    # Classic: Subtle shaping to guide learning without overwhelming base rewards
+                    # Keep pellets at +10 as the primary positive signal
                     if curr_pos == prev_pos:
-                        reward -= 2.0  # Penalty for hitting wall (matches pellet scale)
+                        reward -= 0.2  # Small penalty for hitting wall
 
                     # Add ghost avoidance and pellet seeking for classic
                     elif env.pellets and env.ghost_pos:
@@ -133,19 +137,19 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
                         prev_ghost_dist = min(abs(g[0] - prev_pos[0]) + abs(g[1] - prev_pos[1]) for g in env.ghost_pos)
                         curr_ghost_dist = min(abs(g[0] - curr_pos[0]) + abs(g[1] - curr_pos[1]) for g in env.ghost_pos)
 
-                        # Ghost avoidance is critical - stronger signals
+                        # Ghost avoidance is critical but keep signals subtle
                         if curr_ghost_dist < 5:
                             if curr_ghost_dist < prev_ghost_dist:
-                                reward -= 3.0  # Strong penalty for approaching ghosts
+                                reward -= 0.5  # Penalty for approaching ghosts (reduced from -3.0)
                             elif curr_ghost_dist > prev_ghost_dist:
-                                reward += 2.0  # Good reward for escaping
+                                reward += 0.3  # Reward for escaping (reduced from +2.0)
                             else:
-                                reward -= 0.5  # Small penalty for staying same distance
+                                reward -= 0.1  # Tiny penalty for staying same distance
                         # Pellet approach (secondary priority)
                         elif curr_min_dist < prev_min_dist:
-                            reward += 1.0  # Reward for approaching pellets
+                            reward += 0.2  # Reward for approaching pellets (reduced from +1.0)
                         elif curr_min_dist > prev_min_dist:
-                            reward -= 0.5  # Small penalty for moving away
+                            reward -= 0.1  # Small penalty for moving away (reduced from -0.5)
                 else:
                     # Small layouts: keep existing shaping (it works well)
                     if curr_pos == prev_pos:
@@ -196,7 +200,9 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
             if step % TARGET_FREQ == 0:
                 target.load_state_dict(policy.state_dict())
 
+        # Check episode outcome
         won = (len(env.pellets) == 0)
+        timeout = (episode_steps >= MAX_STEPS_PER_EPISODE)
         env.close()
 
         # Track rewards and wins
@@ -205,8 +211,13 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
         episode_wins.append(1 if won else 0)
 
         if True:  # Print every episode
-            result = "WIN " if won else "LOSS"
-            print(f"[Ep {ep:4d}] {result} | Layout: {current_layout:15s} | reward = {ep_reward:7.1f}")
+            if won:
+                result = "WIN "
+            elif timeout:
+                result = "TIMEOUT"
+            else:
+                result = "LOSS"
+            print(f"[Ep {ep:4d}] {result:7s} | Layout: {current_layout:15s} | reward = {ep_reward:7.1f} | steps = {episode_steps:3d}")
 
             # Update stats
             layout_stats[current_layout]['episodes'] += 1
@@ -250,8 +261,8 @@ def train_mixed(layouts: list[str], episodes: int, model_name: str, arch: str, l
             plt.tight_layout()
             plt.pause(0.01)
 
-        # Save checkpoint every 1000 episodes
-        if ep % 500 == 0:
+        # Save checkpoint every 1000 episodes (for 10k training)
+        if ep % 1000 == 0:
             # Create directory: checkpoints/<model_name>/
             checkpoint_dir = Path("checkpoints") / model_name
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
